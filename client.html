@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Ableton Link Browser Client</title>
+</head>
+<body>
+  <h1>Ableton Link Browser Client</h1>
+  <button id="start">Start Audio</button>
+  <input id="tempo" type="number" value="120" step="1"> BPM
+
+  <script>
+    const ws = new WebSocket("ws://localhost:3000");
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    let bpm = 120;
+    let lastBeatIndex = -1; // track last integer beat played
+
+    ws.onmessage = (event) => {
+      const { beat, phase, bpm: newBpm } = JSON.parse(event.data);
+      bpm = newBpm;
+
+      const beatIndex = Math.floor(beat);
+
+      // only schedule if we've moved into a new beat
+      if (beatIndex !== lastBeatIndex) {
+        lastBeatIndex = beatIndex;
+
+        const secondsPerBeat = 60 / bpm;
+        const currentTime = audioCtx.currentTime;
+
+        const fractional = beat % 1;
+        const timeToNextBeat = (1 - fractional) * secondsPerBeat;
+        const nextBeatTime = currentTime + timeToNextBeat;
+
+        const osc = audioCtx.createOscillator();
+        const env = audioCtx.createGain();
+
+        // downbeat cue: phase wraps every 4 beats
+        osc.frequency.value = (beatIndex % 4 === 0) ? 880 : 440;
+
+        env.gain.setValueAtTime(1, nextBeatTime);
+        env.gain.exponentialRampToValueAtTime(0.001, nextBeatTime + 0.1);
+
+        osc.connect(env);
+        env.connect(audioCtx.destination);
+
+        osc.start(nextBeatTime);
+        osc.stop(nextBeatTime + 0.1);
+      }
+    };
+
+    document.getElementById("start").onclick = () => {
+      audioCtx.resume();
+    };
+
+    document.getElementById("tempo").onchange = (e) => {
+      const newTempo = parseFloat(e.target.value);
+      ws.send(JSON.stringify({ bpm: newTempo }));
+    };
+  </script>
+</body>
+</html>
