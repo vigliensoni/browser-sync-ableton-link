@@ -3,21 +3,119 @@
 <head>
   <meta charset="utf-8">
   <title>Ableton Link Browser Client</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 16px;
+      color: #222;
+    }
+
+    h1 {
+      margin-top: 0;
+      font-size: 20px;
+    }
+
+    #controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    #pulse-container {
+      margin-top: 20px;
+      max-width: 520px;
+    }
+
+    #pulse-container p {
+      margin: 0 0 8px 0;
+      font-weight: bold;
+      letter-spacing: 0.04em;
+    }
+
+    #pulse-display {
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .pulse {
+      height: 32px;
+      border-radius: 4px;
+      background: #d0d0d0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      transition: background 80ms linear, color 80ms linear;
+      color: #222;
+    }
+
+    .pulse.active {
+      background: #1e88e5;
+      color: #fff;
+      font-weight: bold;
+    }
+  </style>
 </head>
 <body>
   <h1>Ableton Link Browser Client</h1>
-  <button id="start">Start Audio</button>
-  <input id="tempo" type="number" value="120" step="1"> BPM
+  <div id="controls">
+    <button id="start">Start Audio</button>
+    <label>
+      <input id="tempo" type="number" value="120" step="1"> BPM
+    </label>
+  </div>
+
+  <div id="pulse-container">
+    <p>24 Pulse Clock (PPQ)</p>
+    <div id="pulse-display"></div>
+  </div>
 
   <script>
     const ws = new WebSocket("ws://localhost:3000");
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     let bpm = 120;
     let lastBeatIndex = -1; // track last integer beat played
+    const pulsesPerQuarter = 24;
+    let syncedBeat = 0;
+    let syncTimestamp = performance.now();
+
+    const pulseDisplay = document.getElementById("pulse-display");
+    const pulseNodes = Array.from({ length: pulsesPerQuarter }, (_, idx) => {
+      const pulse = document.createElement("div");
+      pulse.className = "pulse";
+      pulse.textContent = idx + 1;
+      pulseDisplay.appendChild(pulse);
+      return pulse;
+    });
+
+    // Visualize the Link clock at 24 pulses per quarter (PPQ)
+    function renderPulseDisplay() {
+      const now = performance.now();
+      const elapsedSeconds = (now - syncTimestamp) / 1000;
+      const currentBeat = syncedBeat + (elapsedSeconds * bpm) / 60;
+      const beatPosition = currentBeat % 1;
+      const activeIndex = Math.floor((beatPosition * pulsesPerQuarter + pulsesPerQuarter) % pulsesPerQuarter);
+
+      pulseNodes.forEach((node, index) => {
+        if (index === activeIndex) {
+          node.classList.add("active");
+        } else {
+          node.classList.remove("active");
+        }
+      });
+
+      requestAnimationFrame(renderPulseDisplay);
+    }
+
+    requestAnimationFrame(renderPulseDisplay);
 
     ws.onmessage = (event) => {
-      const { beat, phase, bpm: newBpm } = JSON.parse(event.data);
+      const { beat, bpm: newBpm } = JSON.parse(event.data);
       bpm = newBpm;
+      syncedBeat = beat;
+      syncTimestamp = performance.now();
 
       const beatIndex = Math.floor(beat);
 
