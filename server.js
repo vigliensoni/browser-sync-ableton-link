@@ -31,24 +31,31 @@ function updateClock() {
   return { beat: beatPosition, phase };
 }
 
-// broadcast state to clients
-setInterval(() => {
+function broadcastState() {
   const { beat, phase } = updateClock();
   const msg = JSON.stringify({ bpm: link.bpm, beat, phase });
   wss.clients.forEach((client) => {
     if (client.readyState === 1) client.send(msg);
   });
-}, 50); // update every 50ms
+}
+
+// broadcast state to clients
+setInterval(broadcastState, 50); // update every 50ms
 
 // allow clients to change tempo
 wss.on("connection", (ws) => {
   console.log("Browser client connected");
+  // immediately share the current clock with the newly connected client
+  const { beat, phase } = updateClock();
+  ws.send(JSON.stringify({ bpm: link.bpm, beat, phase }));
+
   ws.on("message", (msg) => {
     try {
       const { bpm } = JSON.parse(msg);
-      if (bpm) {
+      if (typeof bpm === "number" && Number.isFinite(bpm) && bpm > 0) {
         link.bpm = bpm;
         console.log(`Tempo set to ${bpm}`);
+        broadcastState(); // push the updated tempo to all peers right away
       }
     } catch (e) {
       console.error("Invalid message", e);
