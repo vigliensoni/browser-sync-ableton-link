@@ -75,13 +75,16 @@
   <script>
     const ws = new WebSocket("ws://localhost:3000");
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const startButton = document.getElementById("start");
+    const tempoInput = document.getElementById("tempo");
+    const pulseDisplay = document.getElementById("pulse-display");
     let bpm = 120;
     let lastBeatIndex = -1; // track last integer beat played
     const pulsesPerQuarter = 24;
     let syncedBeat = 0;
     let syncTimestamp = performance.now();
+    let isEditingTempo = false;
 
-    const pulseDisplay = document.getElementById("pulse-display");
     const pulseNodes = Array.from({ length: pulsesPerQuarter }, (_, idx) => {
       const pulse = document.createElement("div");
       pulse.className = "pulse";
@@ -114,6 +117,9 @@
     ws.onmessage = (event) => {
       const { beat, bpm: newBpm } = JSON.parse(event.data);
       bpm = newBpm;
+      if (!isEditingTempo) {
+        tempoInput.value = String(newBpm);
+      }
       syncedBeat = beat;
       syncTimestamp = performance.now();
 
@@ -147,12 +153,25 @@
       }
     };
 
-    document.getElementById("start").onclick = () => {
+    startButton.onclick = () => {
       audioCtx.resume();
     };
 
-    document.getElementById("tempo").onchange = (e) => {
+    tempoInput.addEventListener("focus", () => {
+      isEditingTempo = true;
+    });
+
+    tempoInput.addEventListener("blur", () => {
+      isEditingTempo = false;
+      tempoInput.value = String(bpm);
+    });
+
+    tempoInput.onchange = (e) => {
       const newTempo = parseFloat(e.target.value);
+      if (!Number.isFinite(newTempo) || newTempo <= 0) {
+        return;
+      }
+      bpm = newTempo;
       ws.send(JSON.stringify({ bpm: newTempo }));
     };
   </script>
